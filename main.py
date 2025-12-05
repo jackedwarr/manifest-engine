@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Security, Depends, Request, Form
+from fastapi import FastAPI, HTTPException, Security, Depends, Request, Form, UploadFile, File
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
@@ -6,9 +6,12 @@ from typing import List
 from jinja2 import Environment, FileSystemLoader
 import os
 import sqlite3
+import json
+import pandas as pd
+import io
 from datetime import datetime
 
-app = FastAPI(title="MANIFEST: The Universal Adapter (TOP 50)")
+app = FastAPI(title="MANIFEST: The Universal Adapter (IRONCLAD)")
 
 # --- CONFIG & DATABASE ---
 API_KEY_NAME = "X-API-KEY"
@@ -55,14 +58,13 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- THE GLOBAL PORT DATABASE (The Top 50) ---
-# We map the UN/LOCODE to the Template they require.
+# --- GLOBAL PORT DATABASE (FULL ARSENAL) ---
 PORT_DATABASE = {
     # THE DIVAS (Custom Templates)
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
     
-    # THE GIANTS (Mapped to Standard IMO Fallback for now)
+    # THE GIANTS (Mapped to Standard IMO Fallback)
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
     "CNNBG": {"name": "Ningbo-Zhoushan (China)", "template": "generic_fal.xml"},
     "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
@@ -117,22 +119,14 @@ PORT_DATABASE = {
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "coverage": "Top 50 Ports Active"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Ironclad Edition"}
 
 # 1. THE ENGINE
-@app.post("/api/v1/port-call")
-def submit_port_call(manifest: PortCall):
-    # Lookup the port in our database
+def process_manifest(manifest: PortCall):
+    # Lookup Port or Fallback to Generic
     port_info = PORT_DATABASE.get(manifest.port_code)
+    template_file = port_info["template"] if port_info else "generic_fal.xml"
     
-    # If it's a Top 50 port, use its assigned template. 
-    # If it's unknown, fall back to Safety Net.
-    if port_info:
-        template_file = port_info["template"]
-    else:
-        template_file = "generic_fal.xml"
-    
-    # Render
     template = env.get_template(template_file)
     output_content = template.render(
         vessel_name=manifest.vessel_name,
@@ -149,78 +143,113 @@ def submit_port_call(manifest: PortCall):
         f.write(output_content)
 
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
-    return {"status": "processed", "file_ready": output_filename, "template_used": template_file}
+    return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE UI (With the Dropdown)
+# 2. THE UI
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
-    # Generate the options list dynamically from our database
     options_html = ""
-    # Sort them alphabetically by name so it looks professional
+    # Sorted list of all 50+ ports
     for code, info in sorted(PORT_DATABASE.items(), key=lambda x: x[1]['name']):
         options_html += f'<option value="{code}">{info["name"]} ({code})</option>'
 
     return f"""
     <html>
         <head>
-            <title>MANIFEST | New Filing</title>
+            <title>MANIFEST | Upload</title>
             <style>
                 body {{ background-color: #0a0a0a; color: #fff; font-family: 'Courier New', monospace; padding: 40px; display: flex; justify-content: center; }}
-                .form-card {{ background: #1a1a1a; padding: 30px; border-radius: 0px; width: 500px; border: 1px solid #444; }}
-                h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; letter-spacing: 2px; }}
+                .form-card {{ background: #1a1a1a; padding: 30px; width: 500px; border: 1px solid #444; }}
+                h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; }}
                 label {{ display: block; margin-top: 20px; color: #888; font-size: 12px; font-weight: bold; }}
                 input, select {{ width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: 'Courier New', monospace; }}
-                .hint {{ font-size: 10px; color: #555; margin-top: 2px; }}
-                button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }}
-                button:hover {{ background: #fff; }}
+                button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; }}
             </style>
         </head>
         <body>
             <div class="form-card">
-                <h2>NEW PORT CALL</h2>
-                <form action="/submit-form" method="post">
-                    <label>VESSEL NAME</label>
-                    <input type="text" name="vessel_name" value="MAERSK GLOBAL" required>
-                    
-                    <label>VOYAGE REFERENCE</label>
-                    <input type="text" name="voyage_ref" value="VOY-2025-X" required>
-                    
+                <h2>FILE UPLOAD</h2>
+                <form action="/submit-form" method="post" enctype="multipart/form-data">
                     <label>SELECT DESTINATION PORT</label>
                     <select name="port_code">
                         {options_html}
-                        <option value="OTHER">--- Other / Manual Input ---</option>
+                        <option value="OTHER">--- Manual / Other ---</option>
                     </select>
                     
-                    <label>ETA (UTC)</label>
-                    <input type="datetime-local" name="eta" required>
+                    <label>UPLOAD CREW LIST (.xlsx, .csv, .json)</label>
+                    <input type="file" name="file" accept=".json,.xlsx,.csv" required>
+                    <div style="font-size:10px; color:#555; margin-top:5px;">Supports: Excel, CSV, JSON</div>
                     
-                    <button type="submit">GENERATE MANIFEST</button>
+                    <button type="submit">PROCESS FILE</button>
                 </form>
             </div>
         </body>
     </html>
     """
 
-# 3. FORM HANDLER
+# 3. THE FORM HANDLER (Reads EXCEL + CSV + JSON)
 @app.post("/submit-form", response_class=HTMLResponse)
-async def handle_form(vessel_name: str = Form(...), voyage_ref: str = Form(...), port_code: str = Form(...), eta: str = Form(...)):
+async def handle_form(port_code: str = Form(...), file: UploadFile = File(...)):
+    filename = file.filename
+    content = await file.read()
+    
+    # Defaults
+    vessel_name = "MAERSK UNIVERSAL"
+    voyage_ref = "VOY-UNIV-001"
+    crew_list = []
+
+    try:
+        # LOGIC SWITCH: JSON vs EXCEL vs CSV
+        if filename.endswith(".json"):
+            data = json.loads(content)
+            crew_list = data.get("crew_list", [])
+            vessel_name = data.get("vessel_name", vessel_name)
+        
+        elif filename.endswith(".xlsx"):
+            # EXCEL HANDLER
+            df = pd.read_excel(io.BytesIO(content))
+            for index, row in df.iterrows():
+                crew_list.append({
+                    "family_name": str(row.get('Surname', row.get('FamilyName', 'Unknown'))),
+                    "rank": str(row.get('Rank', 'Crew')),
+                    "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
+                    "nationality": str(row.get('Nationality', 'Unknown'))
+                })
+        
+        elif filename.endswith(".csv"):
+            # CSV HANDLER (The New Addition)
+            df = pd.read_csv(io.BytesIO(content))
+            for index, row in df.iterrows():
+                crew_list.append({
+                    "family_name": str(row.get('Surname', row.get('FamilyName', 'Unknown'))),
+                    "rank": str(row.get('Rank', 'Crew')),
+                    "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
+                    "nationality": str(row.get('Nationality', 'Unknown'))
+                })
+                
+    except Exception as e:
+        return f"<h1 style='color:red'>ERROR READING FILE: {str(e)}</h1>"
+            
+    # CONVERT TO INTERNAL OBJECT
     call_data = PortCall(
         vessel_name=vessel_name,
         voyage_reference=voyage_ref,
         port_code=port_code,
-        eta=eta,
-        crew_list=[CrewMember(family_name="Doe", rank="Captain", passport="X12345", nationality="UK")]
+        eta="2025-01-01",
+        crew_list=crew_list
     )
     
-    result = submit_port_call(call_data)
+    # RUN ENGINE
+    result = process_manifest(call_data)
     
     return f"""
     <body style="background:#000; color:#fff; font-family:'Courier New'; text-align:center; padding-top:100px;">
         <h1 style="color:#00ff00; border: 2px solid #00ff00; display:inline-block; padding: 10px;">SUCCESS</h1>
-        <p>Port Code: {port_code}</p>
-        <p>File Generated: {result['file_ready']}</p>
+        <p>Processed File: {filename}</p>
+        <p>Crew Members Extracted: {len(crew_list)}</p>
+        <p>Output: {result['file_ready']}</p>
         <br>
-        <a href="/dashboard" style="color:#000; background: #d4af37; text-decoration:none; padding:15px 30px; font-weight:bold;">OPEN COMMAND DASHBOARD</a>
+        <a href="/dashboard" style="color:#000; background: #d4af37; text-decoration:none; padding:15px 30px; font-weight:bold;">OPEN DASHBOARD</a>
     </body>
     """
 
@@ -237,7 +266,6 @@ def dashboard():
     for row in rows:
         status_color = "#00ff00" if row[5] == "SUCCESS" else "#ff0000"
         file_link = f"<a href='/download/{row[6]}' style='color:#fff; text-decoration: underline;'>DOWNLOAD</a>" if row[6] else "-"
-        
         table_rows += f"""
         <tr style="border-bottom: 1px solid #333;">
             <td style="padding: 12px;">{row[1]}</td>
@@ -264,10 +292,9 @@ def dashboard():
         </head>
         <body>
             <div class="top-nav">
-                <a href="/upload" class="btn">+ NEW FILING</a>
+                <a href="/upload" class="btn">+ UPLOAD FILE</a>
             </div>
             <h1>MANIFEST <span style="color:#666">LOGISTICS OS</span></h1>
-            
             <table>
                 <thead>
                     <tr>
