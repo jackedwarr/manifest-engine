@@ -58,16 +58,13 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- GLOBAL PORT DATABASE (FULL 50+) ---
+# --- GLOBAL PORT DATABASE (FULL) ---
 PORT_DATABASE = {
-    # THE DIVAS (Custom Templates)
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
     "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
     "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
     "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
-    
-    # THE GIANTS (Mapped to Standard IMO Fallback)
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
     "CNNBG": {"name": "Ningbo-Zhoushan (China)", "template": "generic_fal.xml"},
     "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
@@ -119,11 +116,10 @@ PORT_DATABASE = {
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Full Enterprise Master"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Master Edition"}
 
 # 1. THE ENGINE
 def process_manifest(manifest: PortCall):
-    # Logic: If port is known, use its template. If not, use Generic.
     port_info = PORT_DATABASE.get(manifest.port_code)
     template_file = port_info["template"] if port_info else "generic_fal.xml"
     
@@ -149,7 +145,6 @@ def process_manifest(manifest: PortCall):
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
-    # Sort alphabetically so it looks professional
     for code, info in sorted(PORT_DATABASE.items(), key=lambda x: x[1]['name']):
         options_html += f'<option value="{code}">{info["name"]} ({code})</option>'
 
@@ -174,7 +169,6 @@ def upload_page():
             <div class="form-card">
                 <h2>LOGISTICS COMMAND</h2>
                 <form action="/submit-form" method="post" enctype="multipart/form-data">
-                    
                     <div class="row">
                         <div class="col">
                             <label>Vessel Name</label>
@@ -224,14 +218,12 @@ async def handle_form(
     manual_port_code: str = Form(None),
     file: UploadFile = File(...)
 ):
-    # 1. DETERMINE PORT
     final_port_code = port_code_select
     if port_code_select == "OTHER":
         if not manual_port_code:
             return "<h1 style='color:red'>ERROR: You selected 'OTHER' but didn't type a Port Code.</h1>"
         final_port_code = manual_port_code.upper()
 
-    # 2. READ FILE
     filename = file.filename
     content = await file.read()
     crew_list = []
@@ -240,7 +232,6 @@ async def handle_form(
         if filename.endswith(".json"):
             data = json.loads(content)
             crew_list = data.get("crew_list", [])
-        
         elif filename.endswith(".xlsx"):
             df = pd.read_excel(io.BytesIO(content))
             for index, row in df.iterrows():
@@ -250,7 +241,6 @@ async def handle_form(
                     "passport": str(row.get('Passport', row.get('DocID', 'X00000')),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
-        
         elif filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
             for index, row in df.iterrows():
@@ -260,11 +250,9 @@ async def handle_form(
                     "passport": str(row.get('Passport', 'X00000')),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
-
     except Exception as e:
         return f"<h1 style='color:red'>FILE ERROR: {str(e)}</h1>"
 
-    # 3. BUILD OBJECT
     call_data = PortCall(
         vessel_name=vessel_name,
         voyage_reference=voyage_ref,
@@ -273,16 +261,14 @@ async def handle_form(
         crew_list=crew_list
     )
 
-    # 4. RUN ENGINE
     result = process_manifest(call_data)
     
-    # 5. SHOW SUCCESS
     standard_msg = "SPECIALIZED BLUEPRINT"
     if "generic" in result['standard_used']:
         standard_msg = "STANDARD IMO FAL FALLBACK"
 
     return f"""
-    <body style="background:#000; color:#fff; font-family:'Courier New'; text-align:center; padding-top:50px;">
+    <body style="background:#000; color:#fff; font-family:monospace; text-align:center; padding-top:50px;">
         <h1 style="color:#00ff00; border: 2px solid #00ff00; display:inline-block; padding: 10px;">SUCCESS</h1>
         <div style="background:#111; display:inline-block; padding:20px; text-align:left; border:1px solid #333;">
             <p><strong>VESSEL:</strong> {vessel_name}</p>
@@ -296,7 +282,7 @@ async def handle_form(
     </body>
     """
 
-# 4. DASHBOARD & DOWNLOADER
+# 4. DASHBOARD
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     conn = sqlite3.connect(DB_NAME)
@@ -319,12 +305,12 @@ def dashboard():
         </tr>
         """
 
-    html_content = f"""
+    return f"""
     <html>
         <head>
             <title>MANIFEST COMMAND</title>
             <style>
-                body {{ background-color: #0a0a0a; color: #e0e0e0; font-family: 'Courier New', monospace; padding: 40px; }}
+                body {{ background-color: #0a0a0a; color: #e0e0e0; font-family: monospace; padding: 40px; }}
                 h1 {{ color: #ffffff; letter-spacing: 2px; border-bottom: 2px solid #333; padding-bottom: 10px; }}
                 table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
                 th {{ text-align: left; padding: 12px; color: #888; border-bottom: 1px solid #555; }}
@@ -355,7 +341,6 @@ def dashboard():
         </body>
     </html>
     """
-    return html_content
 
 @app.get("/download/{filename}")
 def download_file(filename: str):
