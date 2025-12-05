@@ -11,7 +11,7 @@ import pandas as pd
 import io
 from datetime import datetime
 
-app = FastAPI(title="MANIFEST: The Universal Adapter (IRONCLAD)")
+app = FastAPI(title="MANIFEST: The Universal Adapter (MASTER)")
 
 # --- CONFIG & DATABASE ---
 API_KEY_NAME = "X-API-KEY"
@@ -63,6 +63,9 @@ PORT_DATABASE = {
     # THE DIVAS (Custom Templates)
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
+    "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
+    "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
+    "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
     
     # THE GIANTS (Mapped to Standard IMO Fallback)
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
@@ -104,9 +107,6 @@ PORT_DATABASE = {
     "USSAV": {"name": "Savannah (USA)", "template": "generic_fal.xml"},
     "ITGOA": {"name": "Genoa (Italy)", "template": "generic_fal.xml"},
     "FRLEH": {"name": "Le Havre (France)", "template": "generic_fal.xml"},
-    "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
-    "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
-    "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
     "CAVAN": {"name": "Vancouver (Canada)", "template": "generic_fal.xml"},
     "AUMEL": {"name": "Melbourne (Australia)", "template": "generic_fal.xml"},
     "AUBNE": {"name": "Brisbane (Australia)", "template": "generic_fal.xml"},
@@ -119,11 +119,11 @@ PORT_DATABASE = {
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Ironclad Edition"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Global Command Console"}
 
 # 1. THE ENGINE
 def process_manifest(manifest: PortCall):
-    # Lookup Port or Fallback to Generic
+    # Logic: If port is known, use its template. If not, use Generic.
     port_info = PORT_DATABASE.get(manifest.port_code)
     template_file = port_info["template"] if port_info else "generic_fal.xml"
     
@@ -145,110 +145,154 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE UI
+# 2. THE UI (Restored Inputs + Full Dropdown)
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
-    # Sorted list of all 50+ ports
+    # Sort alphabetically so it looks professional
     for code, info in sorted(PORT_DATABASE.items(), key=lambda x: x[1]['name']):
         options_html += f'<option value="{code}">{info["name"]} ({code})</option>'
 
     return f"""
     <html>
         <head>
-            <title>MANIFEST | Upload</title>
+            <title>MANIFEST | Command Console</title>
             <style>
                 body {{ background-color: #0a0a0a; color: #fff; font-family: 'Courier New', monospace; padding: 40px; display: flex; justify-content: center; }}
-                .form-card {{ background: #1a1a1a; padding: 30px; width: 500px; border: 1px solid #444; }}
-                h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; }}
-                label {{ display: block; margin-top: 20px; color: #888; font-size: 12px; font-weight: bold; }}
+                .form-card {{ background: #1a1a1a; padding: 30px; width: 600px; border: 1px solid #444; }}
+                h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; letter-spacing: 2px; }}
+                label {{ display: block; margin-top: 15px; color: #888; font-size: 11px; font-weight: bold; text-transform: uppercase; }}
                 input, select {{ width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: 'Courier New', monospace; }}
-                button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; }}
+                .row {{ display: flex; gap: 10px; }}
+                .col {{ flex: 1; }}
+                button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }}
+                button:hover {{ background: #fff; }}
+                .manual-box {{ border-left: 2px solid #d4af37; padding-left: 10px; margin-top: 10px; }}
             </style>
         </head>
         <body>
             <div class="form-card">
-                <h2>FILE UPLOAD</h2>
+                <h2>LOGISTICS COMMAND</h2>
                 <form action="/submit-form" method="post" enctype="multipart/form-data">
-                    <label>SELECT DESTINATION PORT</label>
-                    <select name="port_code">
+                    
+                    <div class="row">
+                        <div class="col">
+                            <label>Vessel Name</label>
+                            <input type="text" name="vessel_name" value="MAERSK GLOBAL" required>
+                        </div>
+                        <div class="col">
+                            <label>Voyage Reference</label>
+                            <input type="text" name="voyage_ref" value="VOY-2025-X" required>
+                        </div>
+                    </div>
+
+                    <label>ETA (UTC)</label>
+                    <input type="datetime-local" name="eta" required>
+
+                    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+
+                    <label>Destination Port</label>
+                    <select name="port_code_select">
                         {options_html}
-                        <option value="OTHER">--- Manual / Other ---</option>
+                        <option value="OTHER">--- MANUAL / OTHER ---</option>
                     </select>
+
+                    <div class="manual-box">
+                        <label>Manual Port Code (If 'Other' selected)</label>
+                        <input type="text" name="manual_port_code" placeholder="e.g. PKGWA, ERMSW">
+                    </div>
+
+                    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
                     
-                    <label>UPLOAD CREW LIST (.xlsx, .csv, .json)</label>
+                    <label>Upload Crew List (.xlsx, .csv, .json)</label>
                     <input type="file" name="file" accept=".json,.xlsx,.csv" required>
-                    <div style="font-size:10px; color:#555; margin-top:5px;">Supports: Excel, CSV, JSON</div>
                     
-                    <button type="submit">PROCESS FILE</button>
+                    <button type="submit">GENERATE MANIFEST</button>
                 </form>
             </div>
         </body>
     </html>
     """
 
-# 3. THE FORM HANDLER (Reads EXCEL + CSV + JSON)
+# 3. THE FORM HANDLER (Merges Inputs + File)
 @app.post("/submit-form", response_class=HTMLResponse)
-async def handle_form(port_code: str = Form(...), file: UploadFile = File(...)):
+async def handle_form(
+    vessel_name: str = Form(...),
+    voyage_ref: str = Form(...),
+    eta: str = Form(...),
+    port_code_select: str = Form(...),
+    manual_port_code: str = Form(None),
+    file: UploadFile = File(...)
+):
+    # 1. DETERMINE PORT
+    # If they selected "OTHER", we use the text box. Otherwise use the dropdown.
+    final_port_code = port_code_select
+    if port_code_select == "OTHER":
+        if not manual_port_code:
+            return "<h1 style='color:red'>ERROR: You selected 'OTHER' but didn't type a Port Code.</h1>"
+        final_port_code = manual_port_code.upper()
+
+    # 2. READ FILE (To get Crew List)
     filename = file.filename
     content = await file.read()
-    
-    # Defaults
-    vessel_name = "MAERSK UNIVERSAL"
-    voyage_ref = "VOY-UNIV-001"
     crew_list = []
 
     try:
-        # LOGIC SWITCH: JSON vs EXCEL vs CSV
         if filename.endswith(".json"):
             data = json.loads(content)
             crew_list = data.get("crew_list", [])
-            vessel_name = data.get("vessel_name", vessel_name)
         
         elif filename.endswith(".xlsx"):
-            # EXCEL HANDLER
             df = pd.read_excel(io.BytesIO(content))
             for index, row in df.iterrows():
                 crew_list.append({
                     "family_name": str(row.get('Surname', row.get('FamilyName', 'Unknown'))),
                     "rank": str(row.get('Rank', 'Crew')),
-                    "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
+                    "passport": str(row.get('Passport', row.get('DocID', 'X00000')),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
         
         elif filename.endswith(".csv"):
-            # CSV HANDLER (The New Addition)
             df = pd.read_csv(io.BytesIO(content))
             for index, row in df.iterrows():
                 crew_list.append({
-                    "family_name": str(row.get('Surname', row.get('FamilyName', 'Unknown'))),
+                    "family_name": str(row.get('Surname', 'Unknown')),
                     "rank": str(row.get('Rank', 'Crew')),
-                    "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
+                    "passport": str(row.get('Passport', 'X00000')),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
-                
+
     except Exception as e:
-        return f"<h1 style='color:red'>ERROR READING FILE: {str(e)}</h1>"
-            
-    # CONVERT TO INTERNAL OBJECT
+        return f"<h1 style='color:red'>FILE ERROR: {str(e)}</h1>"
+
+    # 3. BUILD OBJECT
     call_data = PortCall(
         vessel_name=vessel_name,
         voyage_reference=voyage_ref,
-        port_code=port_code,
-        eta="2025-01-01",
+        port_code=final_port_code,
+        eta=eta,
         crew_list=crew_list
     )
-    
-    # RUN ENGINE
+
+    # 4. RUN ENGINE
     result = process_manifest(call_data)
     
+    # 5. SHOW SUCCESS
+    standard_msg = "SPECIALIZED BLUEPRINT"
+    if "generic" in result['standard_used']:
+        standard_msg = "STANDARD IMO FAL FALLBACK"
+
     return f"""
-    <body style="background:#000; color:#fff; font-family:'Courier New'; text-align:center; padding-top:100px;">
+    <body style="background:#000; color:#fff; font-family:'Courier New'; text-align:center; padding-top:50px;">
         <h1 style="color:#00ff00; border: 2px solid #00ff00; display:inline-block; padding: 10px;">SUCCESS</h1>
-        <p>Processed File: {filename}</p>
-        <p>Crew Members Extracted: {len(crew_list)}</p>
-        <p>Output: {result['file_ready']}</p>
-        <br>
+        <div style="background:#111; display:inline-block; padding:20px; text-align:left; border:1px solid #333;">
+            <p><strong>VESSEL:</strong> {vessel_name}</p>
+            <p><strong>PORT:</strong> {final_port_code}</p>
+            <p><strong>FORMAT:</strong> <span style="color:#d4af37">{standard_msg}</span></p>
+            <p><strong>CREW COUNT:</strong> {len(crew_list)}</p>
+            <p><strong>FILE:</strong> {result['file_ready']}</p>
+        </div>
+        <br><br>
         <a href="/dashboard" style="color:#000; background: #d4af37; text-decoration:none; padding:15px 30px; font-weight:bold;">OPEN DASHBOARD</a>
     </body>
     """
