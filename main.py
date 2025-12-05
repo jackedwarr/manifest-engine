@@ -58,16 +58,13 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- GLOBAL PORT DATABASE (FULL ARSENAL) ---
+# --- GLOBAL PORT DATABASE ---
 PORT_DATABASE = {
-    # THE DIVAS (Custom Templates)
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
     "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
     "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
     "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
-    
-    # THE GIANTS (Mapped to Standard IMO Fallback)
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
     "CNNBG": {"name": "Ningbo-Zhoushan (China)", "template": "generic_fal.xml"},
     "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
@@ -119,11 +116,10 @@ PORT_DATABASE = {
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Global Command Console"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Master Edition"}
 
 # 1. THE ENGINE
 def process_manifest(manifest: PortCall):
-    # Logic: If port is known, use its template. If not, use Generic.
     port_info = PORT_DATABASE.get(manifest.port_code)
     template_file = port_info["template"] if port_info else "generic_fal.xml"
     
@@ -145,11 +141,10 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE UI (Restored Inputs + Full Dropdown)
+# 2. THE UI
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
-    # Sort alphabetically so it looks professional
     for code, info in sorted(PORT_DATABASE.items(), key=lambda x: x[1]['name']):
         options_html += f'<option value="{code}">{info["name"]} ({code})</option>'
 
@@ -214,7 +209,7 @@ def upload_page():
     </html>
     """
 
-# 3. THE FORM HANDLER (Merges Inputs + File)
+# 3. THE FORM HANDLER
 @app.post("/submit-form", response_class=HTMLResponse)
 async def handle_form(
     vessel_name: str = Form(...),
@@ -225,14 +220,13 @@ async def handle_form(
     file: UploadFile = File(...)
 ):
     # 1. DETERMINE PORT
-    # If they selected "OTHER", we use the text box. Otherwise use the dropdown.
     final_port_code = port_code_select
     if port_code_select == "OTHER":
         if not manual_port_code:
             return "<h1 style='color:red'>ERROR: You selected 'OTHER' but didn't type a Port Code.</h1>"
         final_port_code = manual_port_code.upper()
 
-    # 2. READ FILE (To get Crew List)
+    # 2. READ FILE
     filename = file.filename
     content = await file.read()
     crew_list = []
