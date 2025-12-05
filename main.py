@@ -238,7 +238,7 @@ async def handle_form(
                 crew_list.append({
                     "family_name": str(row.get('Surname', row.get('FamilyName', 'Unknown'))),
                     "rank": str(row.get('Rank', 'Crew')),
-                    "passport": str(row.get('Passport', row.get('DocID', 'X00000')),
+                    "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
         elif filename.endswith(".csv"):
