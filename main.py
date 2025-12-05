@@ -215,7 +215,7 @@ def upload_page():
                     <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
                     
                     <label>Upload Crew List (.xlsx, .csv, .json)</label>
-                    <input type="file" name="file" accept=".json,.xlsx,.csv" required>
+                    <input type="file" name="file" accept=".json,.xlsx,.csv" required style="width: 100%; margin-top: 10px; padding: 20px; background-color: #111; border: 2px dashed #d4af37; color: #fff; cursor: pointer; border-radius: 5px;">
                     
                     <button type="submit">GENERATE MANIFEST</button>
                 </form>
