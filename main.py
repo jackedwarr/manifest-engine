@@ -153,11 +153,27 @@ def upload_page():
         <head>
             <title>MANIFEST | Command Console</title>
             <style>
-                body {{ background-color: #0a0a0a; color: #fff; font-family: 'Courier New', monospace; padding: 40px; display: flex; justify-content: center; }}
+                body {{ background-color: #0a0a0a; color: #fff; font-family: monospace; padding: 40px; display: flex; justify-content: center; }}
                 .form-card {{ background: #1a1a1a; padding: 30px; width: 600px; border: 1px solid #444; }}
                 h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; letter-spacing: 2px; }}
                 label {{ display: block; margin-top: 15px; color: #888; font-size: 11px; font-weight: bold; text-transform: uppercase; }}
-                input, select {{ width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: 'Courier New', monospace; }}
+                
+                /* Standard Text Inputs */
+                input[type="text"], input[type="datetime-local"], select {{ 
+                    width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: monospace; 
+                }}
+                
+                /* Special File Input Styling */
+                input[type="file"] {{ 
+                    width: 100%; 
+                    margin-top: 5px; 
+                    padding: 15px; 
+                    background: #111; 
+                    border: 1px dashed #555; 
+                    color: #fff; 
+                    cursor: pointer;
+                }}
+
                 .row {{ display: flex; gap: 10px; }}
                 .col {{ flex: 1; }}
                 button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }}
