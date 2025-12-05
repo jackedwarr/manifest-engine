@@ -7,9 +7,10 @@ import os
 app = FastAPI(title="MANIFEST: The Universal Adapter")
 
 # --- CONFIGURATION ---
+# This tells the system to look for blueprints in the 'templates' folder
 env = Environment(loader=FileSystemLoader("templates"))
 
-# --- THE GOLDEN RECORD (The Data we accept) ---
+# --- THE GOLDEN RECORD (The Data we accept from the ship) ---
 class CrewMember(BaseModel):
     family_name: str
     rank: str
@@ -23,7 +24,16 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- THE ADAPTER ---
+# --- THE WELCOME MAT (Fixes the 404 Error) ---
+@app.get("/")
+def home():
+    return {
+        "system": "MANIFEST",
+        "status": "online",
+        "message": "Universal Shipping Adapter is Live."
+    }
+
+# --- THE ADAPTER (The Logic) ---
 @app.post("/api/v1/port-call")
 def submit_port_call(manifest: PortCall):
     # 1. IDENTIFY THE TRIBE (Map port code to blueprint)
@@ -47,7 +57,7 @@ def submit_port_call(manifest: PortCall):
         crew_list=manifest.crew_list
     )
     
-    # 3. SAVE THE FILE
+    # 3. SAVE THE FILE (Temporarily to disk)
     output_filename = f"MANIFEST_{manifest.port_code}_{manifest.voyage_reference}"
     output_filename += ".json" if ".json" in template_file else ".xml"
         
