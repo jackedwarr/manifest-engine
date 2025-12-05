@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IMO_General_Declaration>
+    <PortCall>
+        <PortCode>{{ port_code }}</PortCode>
+        <VesselName>{{ vessel_name }}</VesselName>
+        <VoyageNumber>{{ voyage_reference }}</VoyageNumber>
+        <ArrivalDateTime>{{ eta }}</ArrivalDateTime>
+    </PortCall>
+    <CrewList count="{{ crew_list|length }}">
+        {% for member in crew_list %}
+        <CrewMember>
+            <FamilyName>{{ member.family_name }}</FamilyName>
+            <Rank>{{ member.rank }}</Rank>
+            <Nationality>{{ member.nationality }}</Nationality>
+            <IdentityDoc>{{ member.passport }}</IdentityDoc>
+        </CrewMember>
+        {% endfor %}
+    </CrewList>
+</IMO_General_Declaration>
