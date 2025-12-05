@@ -153,32 +153,44 @@ def upload_page():
         <head>
             <title>MANIFEST | Command Console</title>
             <style>
-                body {{ background-color: #0a0a0a; color: #fff; font-family: monospace; padding: 40px; display: flex; justify-content: center; }}
-                .form-card {{ background: #1a1a1a; padding: 30px; width: 600px; border: 1px solid #444; }}
-                h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; letter-spacing: 2px; }}
-                label {{ display: block; margin-top: 15px; color: #888; font-size: 11px; font-weight: bold; text-transform: uppercase; }}
+                body {{ background-color: #0a0a0a; color: #fff; font-family: monospace; padding: 40px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }}
                 
-                /* Standard Text Inputs */
-                input[type="text"], input[type="datetime-local"], select {{ 
-                    width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: monospace; 
-                }}
-                
-                /* Special File Input Styling */
-                input[type="file"] {{ 
-                    width: 100%; 
-                    margin-top: 5px; 
-                    padding: 15px; 
-                    background: #111; 
-                    border: 1px dashed #555; 
-                    color: #fff; 
-                    cursor: pointer;
+                /* THE BOX FIX: Ensure it wraps everything */
+                .form-card {{ 
+                    background: #1a1a1a; 
+                    padding: 40px; 
+                    width: 600px; 
+                    border: 1px solid #444; 
+                    margin-bottom: 50px;
                 }}
 
-                .row {{ display: flex; gap: 10px; }}
+                h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; letter-spacing: 2px; margin-top: 0; }}
+                label {{ display: block; margin-top: 20px; color: #888; font-size: 11px; font-weight: bold; text-transform: uppercase; }}
+                
+                input[type="text"], input[type="datetime-local"], select {{ 
+                    width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: monospace; box-sizing: border-box;
+                }}
+                
+                .manual-box {{ border-left: 2px solid #d4af37; padding-left: 10px; margin-top: 10px; }}
+
+                .row {{ display: flex; gap: 15px; }}
                 .col {{ flex: 1; }}
+
+                /* FILE INPUT FIX: Explicit styling */
+                .file-upload-wrapper {{ margin-top: 5px; }}
+                input[type="file"] {{ 
+                    width: 100%; 
+                    padding: 15px; 
+                    background: #111; 
+                    border: 2px dashed #555; 
+                    color: #fff; 
+                    cursor: pointer;
+                    box-sizing: border-box;
+                }}
+                input[type="file"]:hover {{ border-color: #d4af37; }}
+
                 button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }}
                 button:hover {{ background: #fff; }}
-                .manual-box {{ border-left: 2px solid #d4af37; padding-left: 10px; margin-top: 10px; }}
             </style>
         </head>
         <body>
@@ -199,7 +211,7 @@ def upload_page():
                     <label>ETA (UTC)</label>
                     <input type="datetime-local" name="eta" required>
 
-                    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+                    <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0;">
 
                     <label>Destination Port</label>
                     <select name="port_code_select">
@@ -212,10 +224,12 @@ def upload_page():
                         <input type="text" name="manual_port_code" placeholder="e.g. PKGWA, ERMSW">
                     </div>
 
-                    <hr style="border: 0; border-top: 1px solid #333; margin: 20px 0;">
+                    <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0;">
                     
                     <label>Upload Crew List (.xlsx, .csv, .json)</label>
-                    <input type="file" name="file" accept=".json,.xlsx,.csv" required style="width: 100%; margin-top: 10px; padding: 20px; background-color: #111; border: 2px dashed #d4af37; color: #fff; cursor: pointer; border-radius: 5px;">
+                    <div class="file-upload-wrapper">
+                        <input type="file" name="file" accept=".json,.xlsx,.csv" required>
+                    </div>
                     
                     <button type="submit">GENERATE MANIFEST</button>
                 </form>
