@@ -58,13 +58,16 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- GLOBAL PORT DATABASE ---
+# --- GLOBAL PORT DATABASE (FULL 50+) ---
 PORT_DATABASE = {
+    # THE DIVAS (Custom Templates)
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
     "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
     "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
     "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
+    
+    # THE GIANTS (Mapped to Standard IMO Fallback)
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
     "CNNBG": {"name": "Ningbo-Zhoushan (China)", "template": "generic_fal.xml"},
     "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
@@ -116,10 +119,11 @@ PORT_DATABASE = {
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Master Edition"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Full Enterprise Master"}
 
 # 1. THE ENGINE
 def process_manifest(manifest: PortCall):
+    # Logic: If port is known, use its template. If not, use Generic.
     port_info = PORT_DATABASE.get(manifest.port_code)
     template_file = port_info["template"] if port_info else "generic_fal.xml"
     
@@ -145,6 +149,7 @@ def process_manifest(manifest: PortCall):
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
+    # Sort alphabetically so it looks professional
     for code, info in sorted(PORT_DATABASE.items(), key=lambda x: x[1]['name']):
         options_html += f'<option value="{code}">{info["name"]} ({code})</option>'
 
