@@ -1,0 +1,18 @@
+{
+    "RequestType": "ArrivalDeclaration",
+    "VesselID": {
+        "Name": "{{ vessel_name }}",
+        "Voyage": "{{ voyage_reference }}"
+    },
+    "Terminal": "PSA-{{ port_code }}",
+    "CrewManifest": [
+        {% for member in crew_list %}
+        {
+            "Name": "{{ member.family_name }}",
+            "Role": "{{ member.rank }}",
+            "TravelDoc": "{{ member.passport }}",
+            "Nation": "{{ member.nationality }}"
+        }{{ "," if not loop.last }}
+        {% endfor %}
+    ]
+}

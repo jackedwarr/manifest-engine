@@ -1,0 +1,18 @@
+<UK_NMSW_Form>
+  <Voyage>
+    <Vessel>{{ vessel_name }}</Vessel>
+    <VoyageRef>{{ voyage_reference }}</VoyageRef>
+    <Port>{{ port_code }}</Port>
+    <ETA>{{ eta }}</ETA>
+  </Voyage>
+  <CrewList>
+    {% for member in crew_list %}
+    <Person>
+      <Surname>{{ member.family_name }}</Surname>
+      <Rank>{{ member.rank }}</Rank>
+      <DocID>{{ member.passport }}</DocID>
+      <Nationality>{{ member.nationality }}</Nationality>
+    </Person>
+    {% endfor %}
+  </CrewList>
+</UK_NMSW_Form>
