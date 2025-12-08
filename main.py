@@ -10,14 +10,20 @@ import json
 import pandas as pd
 import io
 from datetime import datetime
+import google.generativeai as genai
 
-app = FastAPI(title="MANIFEST: The Universal Adapter (MASTER)")
+app = FastAPI(title="MANIFEST: The Global Standardiser")
 
 # --- CONFIG & DATABASE ---
 API_KEY_NAME = "X-API-KEY"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 env = Environment(loader=FileSystemLoader("templates"))
 DB_NAME = "manifest_audit.db"
+
+# --- AI SETUP ---
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -58,7 +64,7 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- GLOBAL PORT DATABASE (FULL) ---
+# --- GLOBAL PORT DATABASE ---
 PORT_DATABASE = {
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
@@ -66,59 +72,28 @@ PORT_DATABASE = {
     "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
     "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
-    "CNNBG": {"name": "Ningbo-Zhoushan (China)", "template": "generic_fal.xml"},
-    "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
-    "CNCAN": {"name": "Guangzhou (China)", "template": "generic_fal.xml"},
-    "KRPUS": {"name": "Busan (South Korea)", "template": "generic_fal.xml"},
-    "CNQDG": {"name": "Qingdao (China)", "template": "generic_fal.xml"},
-    "HKHKG": {"name": "Hong Kong (HK)", "template": "generic_fal.xml"},
-    "CNTSN": {"name": "Tianjin (China)", "template": "generic_fal.xml"},
     "NLRTM": {"name": "Rotterdam (Netherlands)", "template": "generic_fal.xml"},
     "AEDXB": {"name": "Dubai (UAE)", "template": "generic_fal.xml"},
     "MYPKG": {"name": "Port Klang (Malaysia)", "template": "generic_fal.xml"},
     "BEANT": {"name": "Antwerp (Belgium)", "template": "generic_fal.xml"},
     "CNXAM": {"name": "Xiamen (China)", "template": "generic_fal.xml"},
     "USLAX": {"name": "Los Angeles (USA)", "template": "generic_fal.xml"},
-    "MYPTP": {"name": "Tanjung Pelepas (Malaysia)", "template": "generic_fal.xml"},
-    "TWKHH": {"name": "Kaohsiung (Taiwan)", "template": "generic_fal.xml"},
-    "USLGB": {"name": "Long Beach (USA)", "template": "generic_fal.xml"},
     "DEHAM": {"name": "Hamburg (Germany)", "template": "generic_fal.xml"},
     "USNYC": {"name": "New York / NJ (USA)", "template": "generic_fal.xml"},
-    "THLCH": {"name": "Laem Chabang (Thailand)", "template": "generic_fal.xml"},
-    "VNSGN": {"name": "Ho Chi Minh City (Vietnam)", "template": "generic_fal.xml"},
-    "LKCMB": {"name": "Colombo (Sri Lanka)", "template": "generic_fal.xml"},
     "MAPTM": {"name": "Tanger Med (Morocco)", "template": "generic_fal.xml"},
     "IDJKT": {"name": "Jakarta (Indonesia)", "template": "generic_fal.xml"},
     "INMUN": {"name": "Mundra (India)", "template": "generic_fal.xml"},
-    "INNSA": {"name": "Nhava Sheva (India)", "template": "generic_fal.xml"},
     "JPTYO": {"name": "Tokyo (Japan)", "template": "generic_fal.xml"},
-    "JPYOK": {"name": "Yokohama (Japan)", "template": "generic_fal.xml"},
-    "ESVLC": {"name": "Valencia (Spain)", "template": "generic_fal.xml"},
-    "ESALG": {"name": "Algeciras (Spain)", "template": "generic_fal.xml"},
-    "VNVUT": {"name": "Cai Mep (Vietnam)", "template": "generic_fal.xml"},
-    "PHMNL": {"name": "Manila (Philippines)", "template": "generic_fal.xml"},
-    "BRSSZ": {"name": "Santos (Brazil)", "template": "generic_fal.xml"},
-    "SADMM": {"name": "Dammam (Saudi Arabia)", "template": "generic_fal.xml"},
-    "TRMER": {"name": "Mersin (Turkey)", "template": "generic_fal.xml"},
-    "GRPIR": {"name": "Piraeus (Greece)", "template": "generic_fal.xml"},
-    "USSAV": {"name": "Savannah (USA)", "template": "generic_fal.xml"},
-    "ITGOA": {"name": "Genoa (Italy)", "template": "generic_fal.xml"},
-    "FRLEH": {"name": "Le Havre (France)", "template": "generic_fal.xml"},
-    "CAVAN": {"name": "Vancouver (Canada)", "template": "generic_fal.xml"},
-    "AUMEL": {"name": "Melbourne (Australia)", "template": "generic_fal.xml"},
-    "AUBNE": {"name": "Brisbane (Australia)", "template": "generic_fal.xml"},
-    "ZADUR": {"name": "Durban (South Africa)", "template": "generic_fal.xml"},
-    "PABLB": {"name": "Balboa (Panama)", "template": "generic_fal.xml"},
-    "MXMAN": {"name": "Manzanillo (Mexico)", "template": "generic_fal.xml"}
+    "ESALG": {"name": "Algeciras (Spain)", "template": "generic_fal.xml"}
 }
 
 # --- ENDPOINTS ---
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Master Edition"}
+    return {"system": "MANIFEST", "status": "online", "mode": "AI Enabled"}
 
-# 1. THE ENGINE
+# 1. THE ENGINE (XML Generator)
 def process_manifest(manifest: PortCall):
     port_info = PORT_DATABASE.get(manifest.port_code)
     template_file = port_info["template"] if port_info else "generic_fal.xml"
@@ -141,7 +116,39 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE UI
+# 2. THE BRAIN (AI Extraction)
+def extract_with_ai(content, mime_type):
+    if not GEMINI_KEY:
+        raise Exception("AI API Key missing")
+
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = """
+    You are a Maritime Data Entry Clerk. 
+    Extract the Crew List from this document image/PDF.
+    Return ONLY valid raw JSON. No markdown formatting.
+    Target Schema:
+    {
+      "crew_list": [
+        {"family_name": "Surname", "rank": "Rank", "passport": "PassportNumber", "nationality": "ISOcode"}
+      ]
+    }
+    If data is missing, put "UNKNOWN".
+    """
+    
+    try:
+        response = model.generate_content([
+            {'mime_type': mime_type, 'data': content},
+            prompt
+        ])
+        # Clean the response (remove backticks if AI adds them)
+        raw_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(raw_text)
+    except Exception as e:
+        print(f"AI Error: {e}")
+        return {"crew_list": []}
+
+# 3. THE UI
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
@@ -155,7 +162,6 @@ def upload_page():
             <style>
                 body {{ background-color: #0a0a0a; color: #fff; font-family: monospace; padding: 40px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }}
                 
-                /* THE BOX FIX: Ensure it wraps everything */
                 .form-card {{ 
                     background: #1a1a1a; 
                     padding: 40px; 
@@ -172,11 +178,9 @@ def upload_page():
                 }}
                 
                 .manual-box {{ border-left: 2px solid #d4af37; padding-left: 10px; margin-top: 10px; }}
-
                 .row {{ display: flex; gap: 15px; }}
                 .col {{ flex: 1; }}
 
-                /* FILE INPUT FIX: Explicit styling */
                 .file-upload-wrapper {{ margin-top: 5px; }}
                 input[type="file"] {{ 
                     width: 100%; 
@@ -191,11 +195,12 @@ def upload_page():
 
                 button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }}
                 button:hover {{ background: #fff; }}
+                .ai-badge {{ background: #333; color: #00ff00; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 10px; }}
             </style>
         </head>
         <body>
             <div class="form-card">
-                <h2>LOGISTICS COMMAND</h2>
+                <h2>LOGISTICS COMMAND <span class="ai-badge">AI ACTIVE</span></h2>
                 <form action="/submit-form" method="post" enctype="multipart/form-data">
                     <div class="row">
                         <div class="col">
@@ -226,9 +231,9 @@ def upload_page():
 
                     <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0;">
                     
-                    <label>Upload Crew List (.xlsx, .csv, .json)</label>
+                    <label>Upload Manifest (PDF, IMG, Excel)</label>
                     <div class="file-upload-wrapper">
-                        <input type="file" name="file" accept=".json,.xlsx,.csv" required>
+                        <input type="file" name="file" accept=".json,.xlsx,.csv,.pdf,.jpg,.png" required>
                     </div>
                     
                     <button type="submit">GENERATE MANIFEST</button>
@@ -238,7 +243,7 @@ def upload_page():
     </html>
     """
 
-# 3. THE FORM HANDLER
+# 4. THE HANDLER (Routes to AI or Excel)
 @app.post("/submit-form", response_class=HTMLResponse)
 async def handle_form(
     vessel_name: str = Form(...),
@@ -257,11 +262,13 @@ async def handle_form(
     filename = file.filename
     content = await file.read()
     crew_list = []
-
+    
+    # --- ROUTING LOGIC ---
     try:
         if filename.endswith(".json"):
             data = json.loads(content)
             crew_list = data.get("crew_list", [])
+            
         elif filename.endswith(".xlsx"):
             df = pd.read_excel(io.BytesIO(content))
             for index, row in df.iterrows():
@@ -271,6 +278,7 @@ async def handle_form(
                     "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
+
         elif filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
             for index, row in df.iterrows():
@@ -280,9 +288,17 @@ async def handle_form(
                     "passport": str(row.get('Passport', 'X00000')),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
+
+        elif filename.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png')):
+            # --- AI ACTIVATION ---
+            mime_type = file.content_type or "application/pdf"
+            ai_data = extract_with_ai(content, mime_type)
+            crew_list = ai_data.get("crew_list", [])
+
     except Exception as e:
         return f"<h1 style='color:red'>FILE ERROR: {str(e)}</h1>"
 
+    # BUILD OBJECT
     call_data = PortCall(
         vessel_name=vessel_name,
         voyage_reference=voyage_ref,
@@ -312,7 +328,7 @@ async def handle_form(
     </body>
     """
 
-# 4. DASHBOARD
+# 5. DASHBOARD
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     conn = sqlite3.connect(DB_NAME)
