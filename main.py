@@ -20,7 +20,7 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 env = Environment(loader=FileSystemLoader("templates"))
 DB_NAME = "manifest_audit.db"
 
-# --- AI SETUP ---
+# --- AI SETUP (Gemini 1.5 Pro) ---
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
@@ -91,7 +91,7 @@ PORT_DATABASE = {
 
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "AI Enabled"}
+    return {"system": "MANIFEST", "status": "online", "mode": "AI Enabled (Pro)"}
 
 # 1. THE ENGINE (XML Generator)
 def process_manifest(manifest: PortCall):
@@ -116,21 +116,23 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE BRAIN (AI Extraction)
+# 2. THE BRAIN (AI Extraction - Gemini Pro)
 def extract_with_ai(content, mime_type):
     if not GEMINI_KEY:
         raise Exception("AI API Key missing")
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Switched to 'gemini-1.5-pro' for better stability
+    model = genai.GenerativeModel('gemini-1.5-pro')
     
+    # Stricter Prompt
     prompt = """
-    You are a Maritime Data Entry Clerk. 
-    Extract the Crew List from this document image/PDF.
-    Return ONLY valid raw JSON. No markdown formatting.
-    Target Schema:
+    Extract crew data from this image/document.
+    Return ONLY a raw JSON object. Do not wrap it in markdown blocks (no ```json). Do not say "Here is the JSON".
+    The root key must be "crew_list".
+    Schema:
     {
       "crew_list": [
-        {"family_name": "Surname", "rank": "Rank", "passport": "PassportNumber", "nationality": "ISOcode"}
+        {"family_name": "Doe", "rank": "Captain", "passport": "12345", "nationality": "US"}
       ]
     }
     If data is missing, put "UNKNOWN".
@@ -141,14 +143,16 @@ def extract_with_ai(content, mime_type):
             {'mime_type': mime_type, 'data': content},
             prompt
         ])
-        # Clean the response (remove backticks if AI adds them)
+        print(f"AI RAW RESPONSE: {response.text}") # <--- DEBUG LOGGING
+        
+        # Cleanup
         raw_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(raw_text)
     except Exception as e:
-        print(f"AI Error: {e}")
+        print(f"AI PARSING ERROR: {e}")
         return {"crew_list": []}
 
-# 3. THE UI
+# 3. THE UI (Polished)
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
@@ -243,7 +247,7 @@ def upload_page():
     </html>
     """
 
-# 4. THE HANDLER (Routes to AI or Excel)
+# 4. THE HANDLER
 @app.post("/submit-form", response_class=HTMLResponse)
 async def handle_form(
     vessel_name: str = Form(...),
