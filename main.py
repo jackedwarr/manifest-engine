@@ -10,7 +10,7 @@ import json
 import pandas as pd
 import io
 import re
-import requests  # <--- DIRECT CONNECTION (No Library Issues)
+import requests  # <--- DIRECT CONNECTION
 import base64    # <--- IMAGE ENCODING
 from datetime import datetime
 
@@ -158,7 +158,7 @@ PORT_DATABASE = {
 # --- ENDPOINTS ---
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Direct API Link"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Direct API Link (Flash)"}
 
 # 1. THE ENGINE (XML Generator)
 def process_manifest(manifest: PortCall):
@@ -183,14 +183,14 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE BRAIN (DIRECT API CONNECTION - No Library Required)
+# 2. THE BRAIN (DIRECT API CONNECTION - FLASH MODEL)
 def extract_with_ai(content, mime_type):
     if not GEMINI_KEY:
         print("DEBUG: API Key missing")
         return {"crew_list": []}
 
-    # 1. Prepare the URL (Gemini 1.5 Pro)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_KEY}"
+    # SWITCHED TO 'gemini-1.5-flash'
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
     
     # 2. Convert Image to Base64
     b64_data = base64.b64encode(content).decode('utf-8')
@@ -233,7 +233,6 @@ def extract_with_ai(content, mime_type):
         # 5. Extract JSON using Regex Vacuum
         response_json = response.json()
         
-        # Safety check for empty response
         if 'candidates' not in response_json or not response_json['candidates']:
              print("DEBUG: No candidates returned")
              return {"crew_list": []}
@@ -242,12 +241,11 @@ def extract_with_ai(content, mime_type):
         ai_text = response_json['candidates'][0]['content']['parts'][0]['text']
         print(f"DEBUG: AI Raw Text: {ai_text}")
 
-        # VACUUM CLEANER: Find the JSON between { }
+        # VACUUM CLEANER
         match = re.search(r'\{.*\}', ai_text, re.DOTALL)
         if match:
             return json.loads(match.group(0))
         
-        # Fallback
         clean_text = ai_text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
 
