@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manifest: DCSA Protocol</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f4f4f5; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1 { color: #18181b; margin-bottom: 10px; }
+        p { color: #71717a; margin-bottom: 30px; }
+        .upload-box { border: 2px dashed #d4d4d8; padding: 40px; text-align: center; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .upload-box:hover { border-color: #3b82f6; background: #eff6ff; }
+        button { background: #18181b; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 500; cursor: pointer; margin-top: 20px; width: 100%; }
+        button:hover { background: #27272a; }
+        #result { margin-top: 30px; white-space: pre-wrap; background: #1e1e1e; color: #a5f3fc; padding: 20px; border-radius: 8px; font-family: monospace; display: none; }
+        .loader { display: none; margin-top: 20px; color: #3b82f6; font-weight: bold; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manifest Protocol</h1>
+        <p>Upload a Manifest, Bill of Lading, or Handwritten Tally.</p>
+        
+        <form id="uploadForm">
+            <div class="upload-box" onclick="document.getElementById('file').click()">
+                <p>Click to Select Document</p>
+                <input type="file" id="file" name="file" accept=".pdf, .jpg, .jpeg, .png" style="display: none" onchange="document.querySelector('.upload-box p').textContent = this.files[0].name">
+            </div>
+            <button type="submit">Digitise to DCSA Standard</button>
+        </form>
+
+        <div class="loader" id="loader">Processing via Gemini 1.5...</div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('file');
+            if (!fileInput.files[0]) return alert('Please select a file');
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.querySelector('button').disabled = true;
+
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('result').style.display = 'block';
+            } catch (err) {
+                alert('Error: ' + err);
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+                document.querySelector('button').disabled = false;
+            }
+        };
+    </script>
+</body>
+</html>
