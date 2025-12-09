@@ -10,21 +10,20 @@ import json
 import pandas as pd
 import io
 import re
+import requests  # <--- DIRECT CONNECTION (No Library Issues)
+import base64    # <--- IMAGE ENCODING
 from datetime import datetime
-import google.generativeai as genai
 
 app = FastAPI(title="MANIFEST: The Global Standardiser")
 
 # --- CONFIG & DATABASE ---
-API_KEY_NAME = "X-API-KEY"
-api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 env = Environment(loader=FileSystemLoader("templates"))
 DB_NAME = "manifest_audit.db"
 
-# --- AI SETUP (Gemini 1.5 Pro) ---
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+# --- API KEY SETUP (Auto-Cleaner) ---
+# This strips whitespace and quote marks automatically to prevent the "Quotes Trap"
+RAW_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_KEY = RAW_KEY.strip().strip('"').strip("'")
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -65,15 +64,16 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- GLOBAL PORT DATABASE (50+ HUBS) ---
+# --- GLOBAL PORT DATABASE (60+ HUBS) ---
 PORT_DATABASE = {
-    # EUROPE
+    # --- UK & EUROPE ---
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
     "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
     "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
-    "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
-    "GBHUL": {"name": "Hull (UK)", "template": "uk_fal5.xml"},
     "GBIMM": {"name": "Immingham (UK)", "template": "uk_fal5.xml"},
+    "GBHUL": {"name": "Hull (UK)", "template": "uk_fal5.xml"},
+    "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
+    "GBTEE": {"name": "Teesport (UK)", "template": "uk_fal5.xml"},
     "NLRTM": {"name": "Rotterdam (Netherlands)", "template": "generic_fal.xml"},
     "BEANT": {"name": "Antwerp (Belgium)", "template": "generic_fal.xml"},
     "DEHAM": {"name": "Hamburg (Germany)", "template": "generic_fal.xml"},
@@ -88,15 +88,17 @@ PORT_DATABASE = {
     "GRPIR": {"name": "Piraeus (Greece)", "template": "generic_fal.xml"},
     "MTMAR": {"name": "Marsaxlokk (Malta)", "template": "generic_fal.xml"},
     
-    # ASIA
+    # --- ASIA ---
     "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
     "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
-    "CNXAM": {"name": "Xiamen (China)", "template": "generic_fal.xml"},
     "CNNGB": {"name": "Ningbo (China)", "template": "generic_fal.xml"},
+    "CNXAM": {"name": "Xiamen (China)", "template": "generic_fal.xml"},
     "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
     "CNQIN": {"name": "Qingdao (China)", "template": "generic_fal.xml"},
+    "CNTSN": {"name": "Tianjin (China)", "template": "generic_fal.xml"},
     "HKHKG": {"name": "Hong Kong (HK)", "template": "generic_fal.xml"},
     "KRBUS": {"name": "Busan (South Korea)", "template": "generic_fal.xml"},
+    "KRINC": {"name": "Incheon (South Korea)", "template": "generic_fal.xml"},
     "TWKHH": {"name": "Kaohsiung (Taiwan)", "template": "generic_fal.xml"},
     "JPTYO": {"name": "Tokyo (Japan)", "template": "generic_fal.xml"},
     "JPYOK": {"name": "Yokohama (Japan)", "template": "generic_fal.xml"},
@@ -108,39 +110,55 @@ PORT_DATABASE = {
     "VNSGN": {"name": "Ho Chi Minh City (Vietnam)", "template": "generic_fal.xml"},
     "INMUN": {"name": "Mundra (India)", "template": "generic_fal.xml"},
     "INNSA": {"name": "Nhava Sheva (India)", "template": "generic_fal.xml"},
+    "INMAA": {"name": "Chennai (India)", "template": "generic_fal.xml"},
     "LKCMB": {"name": "Colombo (Sri Lanka)", "template": "generic_fal.xml"},
+    "PHMNL": {"name": "Manila (Philippines)", "template": "generic_fal.xml"},
 
-    # MIDDLE EAST & AFRICA
+    # --- MIDDLE EAST & AFRICA ---
     "AEDXB": {"name": "Dubai (UAE)", "template": "generic_fal.xml"},
     "AEJEA": {"name": "Jebel Ali (UAE)", "template": "generic_fal.xml"},
+    "AEKHL": {"name": "Khalifa Port (UAE)", "template": "generic_fal.xml"},
     "OMSLL": {"name": "Salalah (Oman)", "template": "generic_fal.xml"},
     "SAJED": {"name": "Jeddah (Saudi Arabia)", "template": "generic_fal.xml"},
+    "SADMM": {"name": "Dammam (Saudi Arabia)", "template": "generic_fal.xml"},
     "MAPTM": {"name": "Tanger Med (Morocco)", "template": "generic_fal.xml"},
     "EGPSD": {"name": "Port Said (Egypt)", "template": "generic_fal.xml"},
+    "EGPSK": {"name": "Suez (Egypt)", "template": "generic_fal.xml"},
     "ZADUR": {"name": "Durban (South Africa)", "template": "generic_fal.xml"},
+    "ZACPT": {"name": "Cape Town (South Africa)", "template": "generic_fal.xml"},
+    "NGAPP": {"name": "Apapa/Lagos (Nigeria)", "template": "generic_fal.xml"},
 
-    # AMERICAS
+    # --- AMERICAS ---
     "USLAX": {"name": "Los Angeles (USA)", "template": "generic_fal.xml"},
     "USLGB": {"name": "Long Beach (USA)", "template": "generic_fal.xml"},
     "USNYC": {"name": "New York / NJ (USA)", "template": "generic_fal.xml"},
     "USSAV": {"name": "Savannah (USA)", "template": "generic_fal.xml"},
+    "USHOU": {"name": "Houston (USA)", "template": "generic_fal.xml"},
+    "USSEA": {"name": "Seattle (USA)", "template": "generic_fal.xml"},
     "CAVAN": {"name": "Vancouver (Canada)", "template": "generic_fal.xml"},
+    "CAMTR": {"name": "Montreal (Canada)", "template": "generic_fal.xml"},
     "MXMAN": {"name": "Manzanillo (Mexico)", "template": "generic_fal.xml"},
     "PABLB": {"name": "Balboa (Panama)", "template": "generic_fal.xml"},
+    "PAONX": {"name": "Colon (Panama)", "template": "generic_fal.xml"},
     "BRSSZ": {"name": "Santos (Brazil)", "template": "generic_fal.xml"},
+    "BRRIO": {"name": "Rio de Janeiro (Brazil)", "template": "generic_fal.xml"},
     "ARPZA": {"name": "Buenos Aires (Argentina)", "template": "generic_fal.xml"},
+    "CLSAI": {"name": "San Antonio (Chile)", "template": "generic_fal.xml"},
+    "PECLL": {"name": "Callao (Peru)", "template": "generic_fal.xml"},
     
-    # OCEANIA
+    # --- OCEANIA ---
     "AUMEL": {"name": "Melbourne (Australia)", "template": "generic_fal.xml"},
     "AUBNE": {"name": "Brisbane (Australia)", "template": "generic_fal.xml"},
-    "NZAKL": {"name": "Auckland (New Zealand)", "template": "generic_fal.xml"}
+    "AUSYD": {"name": "Sydney (Australia)", "template": "generic_fal.xml"},
+    "AUFRE": {"name": "Fremantle (Australia)", "template": "generic_fal.xml"},
+    "NZAKL": {"name": "Auckland (New Zealand)", "template": "generic_fal.xml"},
+    "NZTRG": {"name": "Tauranga (New Zealand)", "template": "generic_fal.xml"}
 }
 
 # --- ENDPOINTS ---
-
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "AI Enabled (Pro)"}
+    return {"system": "MANIFEST", "status": "online", "mode": "Direct API Link"}
 
 # 1. THE ENGINE (XML Generator)
 def process_manifest(manifest: PortCall):
@@ -165,16 +183,21 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE BRAIN (AI Extraction - Gemini Pro + VACUUM CLEANER)
+# 2. THE BRAIN (DIRECT API CONNECTION - No Library Required)
 def extract_with_ai(content, mime_type):
     if not GEMINI_KEY:
-        raise Exception("AI API Key missing")
+        print("DEBUG: API Key missing")
+        return {"crew_list": []}
 
-    # Use the Pro model
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    # 1. Prepare the URL (Gemini 1.5 Pro)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_KEY}"
     
-    prompt = """
-    Extract crew data from this image/document.
+    # 2. Convert Image to Base64
+    b64_data = base64.b64encode(content).decode('utf-8')
+    
+    # 3. Construct the Payload manually
+    prompt_text = """
+    Extract crew data from this image.
     Return ONLY a valid JSON object.
     The root key must be "crew_list".
     Schema:
@@ -186,30 +209,53 @@ def extract_with_ai(content, mime_type):
     If data is illegible, use "UNKNOWN".
     """
     
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt_text},
+                {"inline_data": {
+                    "mime_type": mime_type,
+                    "data": b64_data
+                }}
+            ]
+        }]
+    }
+    
+    # 4. Send Request
     try:
-        response = model.generate_content([
-            {'mime_type': mime_type, 'data': content},
-            prompt
-        ])
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        print(f"DEBUG: Status Code: {response.status_code}")
         
-        print(f"AI RAW RESPONSE: {response.text}") # Debug Logs
+        if response.status_code != 200:
+             print(f"DEBUG: AI Error Body: {response.text}")
+             return {"crew_list": []}
+             
+        # 5. Extract JSON using Regex Vacuum
+        response_json = response.json()
+        
+        # Safety check for empty response
+        if 'candidates' not in response_json or not response_json['candidates']:
+             print("DEBUG: No candidates returned")
+             return {"crew_list": []}
 
-        # --- THE VACUUM CLEANER ---
-        # 1. Try to find JSON between curly braces first (ignores chatty intros)
-        match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        # Gemini returns data in candidates -> content -> parts -> text
+        ai_text = response_json['candidates'][0]['content']['parts'][0]['text']
+        print(f"DEBUG: AI Raw Text: {ai_text}")
+
+        # VACUUM CLEANER: Find the JSON between { }
+        match = re.search(r'\{.*\}', ai_text, re.DOTALL)
         if match:
-            clean_json = match.group(0)
-            return json.loads(clean_json)
+            return json.loads(match.group(0))
         
-        # 2. Fallback: Clean markdown code blocks
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        # Fallback
+        clean_text = ai_text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
 
     except Exception as e:
-        print(f"AI PARSING ERROR: {e}")
+        print(f"API CONNECTION ERROR: {e}")
         return {"crew_list": []}
 
-# 3. THE UI (Polished)
+# 3. THE UI
 @app.get("/upload", response_class=HTMLResponse)
 def upload_page():
     options_html = ""
@@ -222,38 +268,16 @@ def upload_page():
             <title>MANIFEST | Command Console</title>
             <style>
                 body {{ background-color: #0a0a0a; color: #fff; font-family: monospace; padding: 40px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }}
-                
-                .form-card {{ 
-                    background: #1a1a1a; 
-                    padding: 40px; 
-                    width: 600px; 
-                    border: 1px solid #444; 
-                    margin-bottom: 50px;
-                }}
-
+                .form-card {{ background: #1a1a1a; padding: 40px; width: 600px; border: 1px solid #444; margin-bottom: 50px; }}
                 h2 {{ color: #d4af37; border-bottom: 2px solid #d4af37; padding-bottom: 15px; letter-spacing: 2px; margin-top: 0; }}
                 label {{ display: block; margin-top: 20px; color: #888; font-size: 11px; font-weight: bold; text-transform: uppercase; }}
-                
-                input[type="text"], input[type="datetime-local"], select {{ 
-                    width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: monospace; box-sizing: border-box;
-                }}
-                
+                input[type="text"], input[type="datetime-local"], select {{ width: 100%; background: #000; border: 1px solid #333; color: #00ff00; padding: 12px; margin-top: 5px; font-family: monospace; box-sizing: border-box; }}
                 .manual-box {{ border-left: 2px solid #d4af37; padding-left: 10px; margin-top: 10px; }}
                 .row {{ display: flex; gap: 15px; }}
                 .col {{ flex: 1; }}
-
                 .file-upload-wrapper {{ margin-top: 5px; }}
-                input[type="file"] {{ 
-                    width: 100%; 
-                    padding: 15px; 
-                    background: #111; 
-                    border: 2px dashed #555; 
-                    color: #fff; 
-                    cursor: pointer;
-                    box-sizing: border-box;
-                }}
+                input[type="file"] {{ width: 100%; padding: 15px; background: #111; border: 2px dashed #555; color: #fff; cursor: pointer; box-sizing: border-box; }}
                 input[type="file"]:hover {{ border-color: #d4af37; }}
-
                 button {{ width: 100%; background: #d4af37; color: #000; border: none; padding: 15px; margin-top: 30px; font-weight: bold; cursor: pointer; letter-spacing: 1px; }}
                 button:hover {{ background: #fff; }}
                 .ai-badge {{ background: #333; color: #00ff00; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 10px; }}
@@ -273,30 +297,23 @@ def upload_page():
                             <input type="text" name="voyage_ref" value="VOY-2025-X" required>
                         </div>
                     </div>
-
                     <label>ETA (UTC)</label>
                     <input type="datetime-local" name="eta" required>
-
                     <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0;">
-
                     <label>Destination Port</label>
                     <select name="port_code_select">
                         {options_html}
                         <option value="OTHER">--- MANUAL / OTHER ---</option>
                     </select>
-
                     <div class="manual-box">
                         <label>Manual Port Code (If 'Other' selected)</label>
                         <input type="text" name="manual_port_code" placeholder="e.g. PKGWA, ERMSW">
                     </div>
-
                     <hr style="border: 0; border-top: 1px solid #333; margin: 25px 0;">
-                    
                     <label>Upload Manifest (PDF, IMG, Excel)</label>
                     <div class="file-upload-wrapper">
                         <input type="file" name="file" accept=".json,.xlsx,.csv,.pdf,.jpg,.png" required>
                     </div>
-                    
                     <button type="submit">GENERATE MANIFEST</button>
                 </form>
             </div>
@@ -329,7 +346,6 @@ async def handle_form(
         if filename.endswith(".json"):
             data = json.loads(content)
             crew_list = data.get("crew_list", [])
-            
         elif filename.endswith(".xlsx"):
             df = pd.read_excel(io.BytesIO(content))
             for index, row in df.iterrows():
@@ -339,7 +355,6 @@ async def handle_form(
                     "passport": str(row.get('Passport', row.get('DocID', 'X00000'))),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
-
         elif filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
             for index, row in df.iterrows():
@@ -349,9 +364,8 @@ async def handle_form(
                     "passport": str(row.get('Passport', 'X00000')),
                     "nationality": str(row.get('Nationality', 'Unknown'))
                 })
-
         elif filename.lower().endswith(('.pdf', '.jpg', '.jpeg', '.png')):
-            # --- AI ACTIVATION ---
+            # --- AI ACTIVATION (Direct) ---
             mime_type = file.content_type or "application/pdf"
             ai_data = extract_with_ai(content, mime_type)
             crew_list = ai_data.get("crew_list", [])
@@ -359,7 +373,6 @@ async def handle_form(
     except Exception as e:
         return f"<h1 style='color:red'>FILE ERROR: {str(e)}</h1>"
 
-    # BUILD OBJECT
     call_data = PortCall(
         vessel_name=vessel_name,
         voyage_reference=voyage_ref,
@@ -367,9 +380,7 @@ async def handle_form(
         eta=eta,
         crew_list=crew_list
     )
-
     result = process_manifest(call_data)
-    
     standard_msg = "SPECIALIZED BLUEPRINT"
     if "generic" in result['standard_used']:
         standard_msg = "STANDARD IMO FAL FALLBACK"
@@ -397,7 +408,6 @@ def dashboard():
     c.execute("SELECT * FROM port_calls ORDER BY id DESC LIMIT 50")
     rows = c.fetchall()
     conn.close()
-
     table_rows = ""
     for row in rows:
         status_color = "#00ff00" if row[5] == "SUCCESS" else "#ff0000"
@@ -411,7 +421,6 @@ def dashboard():
             <td style="padding: 12px;">{file_link}</td>
         </tr>
         """
-
     return f"""
     <html>
         <head>
@@ -441,9 +450,7 @@ def dashboard():
                         <th>ACTION</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {table_rows}
-                </tbody>
+                <tbody>{table_rows}</tbody>
             </table>
         </body>
     </html>
