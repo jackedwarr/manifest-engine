@@ -9,6 +9,7 @@ import sqlite3
 import json
 import pandas as pd
 import io
+import re
 from datetime import datetime
 import google.generativeai as genai
 
@@ -64,27 +65,75 @@ class PortCall(BaseModel):
     eta: str
     crew_list: List[CrewMember]
 
-# --- GLOBAL PORT DATABASE ---
+# --- GLOBAL PORT DATABASE (50+ HUBS) ---
 PORT_DATABASE = {
+    # EUROPE
     "GBLON": {"name": "London (UK)", "template": "uk_fal5.xml"},
-    "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
     "GBSOU": {"name": "Southampton (UK)", "template": "uk_fal5.xml"},
     "GBFXT": {"name": "Felixstowe (UK)", "template": "uk_fal5.xml"},
     "GBLIV": {"name": "Liverpool (UK)", "template": "uk_fal5.xml"},
-    "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
+    "GBHUL": {"name": "Hull (UK)", "template": "uk_fal5.xml"},
+    "GBIMM": {"name": "Immingham (UK)", "template": "uk_fal5.xml"},
     "NLRTM": {"name": "Rotterdam (Netherlands)", "template": "generic_fal.xml"},
-    "AEDXB": {"name": "Dubai (UAE)", "template": "generic_fal.xml"},
-    "MYPKG": {"name": "Port Klang (Malaysia)", "template": "generic_fal.xml"},
     "BEANT": {"name": "Antwerp (Belgium)", "template": "generic_fal.xml"},
-    "CNXAM": {"name": "Xiamen (China)", "template": "generic_fal.xml"},
-    "USLAX": {"name": "Los Angeles (USA)", "template": "generic_fal.xml"},
     "DEHAM": {"name": "Hamburg (Germany)", "template": "generic_fal.xml"},
-    "USNYC": {"name": "New York / NJ (USA)", "template": "generic_fal.xml"},
-    "MAPTM": {"name": "Tanger Med (Morocco)", "template": "generic_fal.xml"},
-    "IDJKT": {"name": "Jakarta (Indonesia)", "template": "generic_fal.xml"},
-    "INMUN": {"name": "Mundra (India)", "template": "generic_fal.xml"},
+    "DEBRE": {"name": "Bremerhaven (Germany)", "template": "generic_fal.xml"},
+    "FRLEH": {"name": "Le Havre (France)", "template": "generic_fal.xml"},
+    "FRFOS": {"name": "Fos-sur-Mer (France)", "template": "generic_fal.xml"},
+    "ESALG": {"name": "Algeciras (Spain)", "template": "generic_fal.xml"},
+    "ESVAL": {"name": "Valencia (Spain)", "template": "generic_fal.xml"},
+    "ESBCN": {"name": "Barcelona (Spain)", "template": "generic_fal.xml"},
+    "ITGOA": {"name": "Genoa (Italy)", "template": "generic_fal.xml"},
+    "ITGIO": {"name": "Gioia Tauro (Italy)", "template": "generic_fal.xml"},
+    "GRPIR": {"name": "Piraeus (Greece)", "template": "generic_fal.xml"},
+    "MTMAR": {"name": "Marsaxlokk (Malta)", "template": "generic_fal.xml"},
+    
+    # ASIA
+    "SGSIN": {"name": "Singapore (SG)", "template": "sg_epc.json"},
+    "CNSHA": {"name": "Shanghai (China)", "template": "generic_fal.xml"},
+    "CNXAM": {"name": "Xiamen (China)", "template": "generic_fal.xml"},
+    "CNNGB": {"name": "Ningbo (China)", "template": "generic_fal.xml"},
+    "CNSZX": {"name": "Shenzhen (China)", "template": "generic_fal.xml"},
+    "CNQIN": {"name": "Qingdao (China)", "template": "generic_fal.xml"},
+    "HKHKG": {"name": "Hong Kong (HK)", "template": "generic_fal.xml"},
+    "KRBUS": {"name": "Busan (South Korea)", "template": "generic_fal.xml"},
+    "TWKHH": {"name": "Kaohsiung (Taiwan)", "template": "generic_fal.xml"},
     "JPTYO": {"name": "Tokyo (Japan)", "template": "generic_fal.xml"},
-    "ESALG": {"name": "Algeciras (Spain)", "template": "generic_fal.xml"}
+    "JPYOK": {"name": "Yokohama (Japan)", "template": "generic_fal.xml"},
+    "JPKOB": {"name": "Kobe (Japan)", "template": "generic_fal.xml"},
+    "MYPKG": {"name": "Port Klang (Malaysia)", "template": "generic_fal.xml"},
+    "MYTPP": {"name": "Tanjung Pelepas (Malaysia)", "template": "generic_fal.xml"},
+    "IDJKT": {"name": "Jakarta (Indonesia)", "template": "generic_fal.xml"},
+    "THLCH": {"name": "Laem Chabang (Thailand)", "template": "generic_fal.xml"},
+    "VNSGN": {"name": "Ho Chi Minh City (Vietnam)", "template": "generic_fal.xml"},
+    "INMUN": {"name": "Mundra (India)", "template": "generic_fal.xml"},
+    "INNSA": {"name": "Nhava Sheva (India)", "template": "generic_fal.xml"},
+    "LKCMB": {"name": "Colombo (Sri Lanka)", "template": "generic_fal.xml"},
+
+    # MIDDLE EAST & AFRICA
+    "AEDXB": {"name": "Dubai (UAE)", "template": "generic_fal.xml"},
+    "AEJEA": {"name": "Jebel Ali (UAE)", "template": "generic_fal.xml"},
+    "OMSLL": {"name": "Salalah (Oman)", "template": "generic_fal.xml"},
+    "SAJED": {"name": "Jeddah (Saudi Arabia)", "template": "generic_fal.xml"},
+    "MAPTM": {"name": "Tanger Med (Morocco)", "template": "generic_fal.xml"},
+    "EGPSD": {"name": "Port Said (Egypt)", "template": "generic_fal.xml"},
+    "ZADUR": {"name": "Durban (South Africa)", "template": "generic_fal.xml"},
+
+    # AMERICAS
+    "USLAX": {"name": "Los Angeles (USA)", "template": "generic_fal.xml"},
+    "USLGB": {"name": "Long Beach (USA)", "template": "generic_fal.xml"},
+    "USNYC": {"name": "New York / NJ (USA)", "template": "generic_fal.xml"},
+    "USSAV": {"name": "Savannah (USA)", "template": "generic_fal.xml"},
+    "CAVAN": {"name": "Vancouver (Canada)", "template": "generic_fal.xml"},
+    "MXMAN": {"name": "Manzanillo (Mexico)", "template": "generic_fal.xml"},
+    "PABLB": {"name": "Balboa (Panama)", "template": "generic_fal.xml"},
+    "BRSSZ": {"name": "Santos (Brazil)", "template": "generic_fal.xml"},
+    "ARPZA": {"name": "Buenos Aires (Argentina)", "template": "generic_fal.xml"},
+    
+    # OCEANIA
+    "AUMEL": {"name": "Melbourne (Australia)", "template": "generic_fal.xml"},
+    "AUBNE": {"name": "Brisbane (Australia)", "template": "generic_fal.xml"},
+    "NZAKL": {"name": "Auckland (New Zealand)", "template": "generic_fal.xml"}
 }
 
 # --- ENDPOINTS ---
@@ -116,26 +165,25 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE BRAIN (AI Extraction - Gemini Pro)
+# 2. THE BRAIN (AI Extraction - Gemini Pro + VACUUM CLEANER)
 def extract_with_ai(content, mime_type):
     if not GEMINI_KEY:
         raise Exception("AI API Key missing")
 
-    # Switched to 'gemini-1.5-pro' for better stability
+    # Use the Pro model
     model = genai.GenerativeModel('gemini-1.5-pro')
     
-    # Stricter Prompt
     prompt = """
     Extract crew data from this image/document.
-    Return ONLY a raw JSON object. Do not wrap it in markdown blocks (no ```json). Do not say "Here is the JSON".
+    Return ONLY a valid JSON object.
     The root key must be "crew_list".
     Schema:
     {
       "crew_list": [
-        {"family_name": "Doe", "rank": "Captain", "passport": "12345", "nationality": "US"}
+        {"family_name": "Str", "rank": "Str", "passport": "Str", "nationality": "Str"}
       ]
     }
-    If data is missing, put "UNKNOWN".
+    If data is illegible, use "UNKNOWN".
     """
     
     try:
@@ -143,11 +191,20 @@ def extract_with_ai(content, mime_type):
             {'mime_type': mime_type, 'data': content},
             prompt
         ])
-        print(f"AI RAW RESPONSE: {response.text}") # <--- DEBUG LOGGING
         
-        # Cleanup
-        raw_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(raw_text)
+        print(f"AI RAW RESPONSE: {response.text}") # Debug Logs
+
+        # --- THE VACUUM CLEANER ---
+        # 1. Try to find JSON between curly braces first (ignores chatty intros)
+        match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        if match:
+            clean_json = match.group(0)
+            return json.loads(clean_json)
+        
+        # 2. Fallback: Clean markdown code blocks
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
+
     except Exception as e:
         print(f"AI PARSING ERROR: {e}")
         return {"crew_list": []}
