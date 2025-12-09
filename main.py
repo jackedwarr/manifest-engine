@@ -20,8 +20,8 @@ app = FastAPI(title="MANIFEST: The Global Standardiser")
 env = Environment(loader=FileSystemLoader("templates"))
 DB_NAME = "manifest_audit.db"
 
-# --- API KEY SETUP (Auto-Cleaner) ---
-# This strips whitespace and quote marks automatically to prevent the "Quotes Trap"
+# --- API KEY SETUP ---
+# Auto-cleaner to strip accidental quotes/spaces
 RAW_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_KEY = RAW_KEY.strip().strip('"').strip("'")
 
@@ -158,7 +158,7 @@ PORT_DATABASE = {
 # --- ENDPOINTS ---
 @app.get("/")
 def home():
-    return {"system": "MANIFEST", "status": "online", "mode": "Direct API Link (Flash)"}
+    return {"system": "MANIFEST", "status": "online", "mode": "The Model Hunter"}
 
 # 1. THE ENGINE (XML Generator)
 def process_manifest(manifest: PortCall):
@@ -183,19 +183,24 @@ def process_manifest(manifest: PortCall):
     log_transaction(manifest.vessel_name, manifest.voyage_reference, manifest.port_code, "SUCCESS", output_filename)
     return {"file_ready": output_filename, "standard_used": template_file}
 
-# 2. THE BRAIN (DIRECT API CONNECTION - FLASH MODEL)
+# 2. THE BRAIN (THE MODEL HUNTER)
 def extract_with_ai(content, mime_type):
     if not GEMINI_KEY:
         print("DEBUG: API Key missing")
         return {"crew_list": []}
 
-    # SWITCHED TO 'gemini-1.5-flash'
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    # LIST OF MODELS TO TRY (If one fails 404, we try the next)
+    models_to_try = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-001"
+    ]
     
-    # 2. Convert Image to Base64
     b64_data = base64.b64encode(content).decode('utf-8')
     
-    # 3. Construct the Payload manually
+    # Strict prompt
     prompt_text = """
     Extract crew data from this image.
     Return ONLY a valid JSON object.
@@ -220,38 +225,50 @@ def extract_with_ai(content, mime_type):
             ]
         }]
     }
-    
-    # 4. Send Request
-    try:
-        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
-        print(f"DEBUG: Status Code: {response.status_code}")
-        
-        if response.status_code != 200:
-             print(f"DEBUG: AI Error Body: {response.text}")
-             return {"crew_list": []}
-             
-        # 5. Extract JSON using Regex Vacuum
-        response_json = response.json()
-        
-        if 'candidates' not in response_json or not response_json['candidates']:
-             print("DEBUG: No candidates returned")
-             return {"crew_list": []}
 
-        # Gemini returns data in candidates -> content -> parts -> text
-        ai_text = response_json['candidates'][0]['content']['parts'][0]['text']
-        print(f"DEBUG: AI Raw Text: {ai_text}")
-
-        # VACUUM CLEANER
-        match = re.search(r'\{.*\}', ai_text, re.DOTALL)
-        if match:
-            return json.loads(match.group(0))
+    # THE HUNT LOOP
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_KEY}"
+        print(f"DEBUG: Trying model: {model_name}")
         
-        clean_text = ai_text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        try:
+            response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+            
+            # If 404, loop to next model
+            if response.status_code == 404:
+                print(f"DEBUG: {model_name} not found (404). Trying next...")
+                continue
+            
+            # If success, process it
+            if response.status_code == 200:
+                print(f"DEBUG: SUCCESS with {model_name}")
+                response_json = response.json()
+                
+                if 'candidates' not in response_json or not response_json['candidates']:
+                    print("DEBUG: No candidates returned")
+                    return {"crew_list": []}
 
-    except Exception as e:
-        print(f"API CONNECTION ERROR: {e}")
-        return {"crew_list": []}
+                ai_text = response_json['candidates'][0]['content']['parts'][0]['text']
+                
+                # Vacuum Cleaner
+                match = re.search(r'\{.*\}', ai_text, re.DOTALL)
+                if match:
+                    return json.loads(match.group(0))
+                
+                clean_text = ai_text.replace("```json", "").replace("```", "").strip()
+                return json.loads(clean_text)
+            
+            # If other error (400, 403), stop hunting, it's a key/permission issue
+            print(f"DEBUG: Error {response.status_code}: {response.text}")
+            break
+
+        except Exception as e:
+            print(f"API CONNECTION ERROR: {e}")
+            continue
+
+    # If we exit loop without success
+    print("DEBUG: All models failed.")
+    return {"crew_list": []}
 
 # 3. THE UI
 @app.get("/upload", response_class=HTMLResponse)
